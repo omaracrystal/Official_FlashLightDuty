@@ -8,7 +8,7 @@
     "url": "git://github.com/Automattic/socket.io"
   },
   "scripts": {
-    "start": "node ./src/server/bin/www"
+    "start": "node ./src/server/app.js"
   },
   "dependencies": {
     "body-parser": "~1.13.2",
