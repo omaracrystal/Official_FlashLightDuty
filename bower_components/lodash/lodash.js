@@ -1,298 +1,7 @@
-(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-'use strict';
-
-//
-// We store our EE objects in a plain object whose properties are event names.
-// If `Object.create(null)` is not supported we prefix the event names with a
-// `~` to make sure that the built-in object properties are not overridden or
-// used as an attack vector.
-// We also assume that `Object.create(null)` is available when the event name
-// is an ES6 Symbol.
-//
-var prefix = typeof Object.create !== 'function' ? '~' : false;
-
-/**
- * Representation of a single EventEmitter function.
- *
- * @param {Function} fn Event handler to be called.
- * @param {Mixed} context Context for function execution.
- * @param {Boolean} once Only emit once
- * @api private
- */
-function EE(fn, context, once) {
-  this.fn = fn;
-  this.context = context;
-  this.once = once || false;
-}
-
-/**
- * Minimal EventEmitter interface that is molded against the Node.js
- * EventEmitter interface.
- *
- * @constructor
- * @api public
- */
-function EventEmitter() { /* Nothing to set */ }
-
-/**
- * Holds the assigned EventEmitters by name.
- *
- * @type {Object}
- * @private
- */
-EventEmitter.prototype._events = undefined;
-
-/**
- * Return a list of assigned event listeners.
- *
- * @param {String} event The events that should be listed.
- * @param {Boolean} exists We only need to know if there are listeners.
- * @returns {Array|Boolean}
- * @api public
- */
-EventEmitter.prototype.listeners = function listeners(event, exists) {
-  var evt = prefix ? prefix + event : event
-    , available = this._events && this._events[evt];
-
-  if (exists) return !!available;
-  if (!available) return [];
-  if (available.fn) return [available.fn];
-
-  for (var i = 0, l = available.length, ee = new Array(l); i < l; i++) {
-    ee[i] = available[i].fn;
-  }
-
-  return ee;
-};
-
-/**
- * Emit an event to all registered event listeners.
- *
- * @param {String} event The name of the event.
- * @returns {Boolean} Indication if we've emitted an event.
- * @api public
- */
-EventEmitter.prototype.emit = function emit(event, a1, a2, a3, a4, a5) {
-  var evt = prefix ? prefix + event : event;
-
-  if (!this._events || !this._events[evt]) return false;
-
-  var listeners = this._events[evt]
-    , len = arguments.length
-    , args
-    , i;
-
-  if ('function' === typeof listeners.fn) {
-    if (listeners.once) this.removeListener(event, listeners.fn, undefined, true);
-
-    switch (len) {
-      case 1: return listeners.fn.call(listeners.context), true;
-      case 2: return listeners.fn.call(listeners.context, a1), true;
-      case 3: return listeners.fn.call(listeners.context, a1, a2), true;
-      case 4: return listeners.fn.call(listeners.context, a1, a2, a3), true;
-      case 5: return listeners.fn.call(listeners.context, a1, a2, a3, a4), true;
-      case 6: return listeners.fn.call(listeners.context, a1, a2, a3, a4, a5), true;
-    }
-
-    for (i = 1, args = new Array(len -1); i < len; i++) {
-      args[i - 1] = arguments[i];
-    }
-
-    listeners.fn.apply(listeners.context, args);
-  } else {
-    var length = listeners.length
-      , j;
-
-    for (i = 0; i < length; i++) {
-      if (listeners[i].once) this.removeListener(event, listeners[i].fn, undefined, true);
-
-      switch (len) {
-        case 1: listeners[i].fn.call(listeners[i].context); break;
-        case 2: listeners[i].fn.call(listeners[i].context, a1); break;
-        case 3: listeners[i].fn.call(listeners[i].context, a1, a2); break;
-        default:
-          if (!args) for (j = 1, args = new Array(len -1); j < len; j++) {
-            args[j - 1] = arguments[j];
-          }
-
-          listeners[i].fn.apply(listeners[i].context, args);
-      }
-    }
-  }
-
-  return true;
-};
-
-/**
- * Register a new EventListener for the given event.
- *
- * @param {String} event Name of the event.
- * @param {Functon} fn Callback function.
- * @param {Mixed} context The context of the function.
- * @api public
- */
-EventEmitter.prototype.on = function on(event, fn, context) {
-  var listener = new EE(fn, context || this)
-    , evt = prefix ? prefix + event : event;
-
-  if (!this._events) this._events = prefix ? {} : Object.create(null);
-  if (!this._events[evt]) this._events[evt] = listener;
-  else {
-    if (!this._events[evt].fn) this._events[evt].push(listener);
-    else this._events[evt] = [
-      this._events[evt], listener
-    ];
-  }
-
-  return this;
-};
-
-/**
- * Add an EventListener that's only called once.
- *
- * @param {String} event Name of the event.
- * @param {Function} fn Callback function.
- * @param {Mixed} context The context of the function.
- * @api public
- */
-EventEmitter.prototype.once = function once(event, fn, context) {
-  var listener = new EE(fn, context || this, true)
-    , evt = prefix ? prefix + event : event;
-
-  if (!this._events) this._events = prefix ? {} : Object.create(null);
-  if (!this._events[evt]) this._events[evt] = listener;
-  else {
-    if (!this._events[evt].fn) this._events[evt].push(listener);
-    else this._events[evt] = [
-      this._events[evt], listener
-    ];
-  }
-
-  return this;
-};
-
-/**
- * Remove event listeners.
- *
- * @param {String} event The event we want to remove.
- * @param {Function} fn The listener that we need to find.
- * @param {Mixed} context Only remove listeners matching this context.
- * @param {Boolean} once Only remove once listeners.
- * @api public
- */
-EventEmitter.prototype.removeListener = function removeListener(event, fn, context, once) {
-  var evt = prefix ? prefix + event : event;
-
-  if (!this._events || !this._events[evt]) return this;
-
-  var listeners = this._events[evt]
-    , events = [];
-
-  if (fn) {
-    if (listeners.fn) {
-      if (
-           listeners.fn !== fn
-        || (once && !listeners.once)
-        || (context && listeners.context !== context)
-      ) {
-        events.push(listeners);
-      }
-    } else {
-      for (var i = 0, length = listeners.length; i < length; i++) {
-        if (
-             listeners[i].fn !== fn
-          || (once && !listeners[i].once)
-          || (context && listeners[i].context !== context)
-        ) {
-          events.push(listeners[i]);
-        }
-      }
-    }
-  }
-
-  //
-  // Reset the array, or remove it completely if we have no more listeners.
-  //
-  if (events.length) {
-    this._events[evt] = events.length === 1 ? events[0] : events;
-  } else {
-    delete this._events[evt];
-  }
-
-  return this;
-};
-
-/**
- * Remove all listeners or only the listeners for the specified event.
- *
- * @param {String} event The event want to remove all listeners for.
- * @api public
- */
-EventEmitter.prototype.removeAllListeners = function removeAllListeners(event) {
-  if (!this._events) return this;
-
-  if (event) delete this._events[prefix ? prefix + event : event];
-  else this._events = prefix ? {} : Object.create(null);
-
-  return this;
-};
-
-//
-// Alias methods names because people roll like that.
-//
-EventEmitter.prototype.off = EventEmitter.prototype.removeListener;
-EventEmitter.prototype.addListener = EventEmitter.prototype.on;
-
-//
-// This function doesn't apply anymore.
-//
-EventEmitter.prototype.setMaxListeners = function setMaxListeners() {
-  return this;
-};
-
-//
-// Expose the prefix.
-//
-EventEmitter.prefixed = prefix;
-
-//
-// Expose the module.
-//
-if ('undefined' !== typeof module) {
-  module.exports = EventEmitter;
-}
-
-},{}],2:[function(require,module,exports){
-if (typeof Object.create === 'function') {
-  // implementation from standard node.js 'util' module
-  module.exports = function inherits(ctor, superCtor) {
-    ctor.super_ = superCtor
-    ctor.prototype = Object.create(superCtor.prototype, {
-      constructor: {
-        value: ctor,
-        enumerable: false,
-        writable: true,
-        configurable: true
-      }
-    });
-  };
-} else {
-  // old school shim for old browsers
-  module.exports = function inherits(ctor, superCtor) {
-    ctor.super_ = superCtor
-    var TempCtor = function () {}
-    TempCtor.prototype = superCtor.prototype
-    ctor.prototype = new TempCtor()
-    ctor.prototype.constructor = ctor
-  }
-}
-
-},{}],3:[function(require,module,exports){
-(function (global){
 /**
  * @license
  * lodash 3.10.1 (Custom Build) <https://lodash.com/>
- * Build: `lodash modern -d -o ./index.js`
+ * Build: `lodash modern -o ./lodash.js`
  * Copyright 2012-2015 The Dojo Foundation <http://dojofoundation.org/>
  * Based on Underscore.js 1.8.3 <http://underscorejs.org/LICENSE>
  * Copyright 2009-2015 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
@@ -886,7 +595,7 @@ if (typeof Object.create === 'function') {
    * @private
    * @param {Array} array The array to inspect.
    * @param {Function} [iteratee] The function invoked per iteration.
-   * @returns {Array} Returns the new duplicate-value-free array.
+   * @returns {Array} Returns the new duplicate free array.
    */
   function sortedUniq(array, iteratee) {
     var seen,
@@ -1365,7 +1074,7 @@ if (typeof Object.create === 'function') {
           takeCount = nativeMin(length, this.__takeCount__);
 
       if (!isArr || arrLength < LARGE_ARRAY_SIZE || (arrLength == length && takeCount == length)) {
-        return baseWrapperValue((isRight && isArr) ? array.reverse() : array, this.__actions__);
+        return baseWrapperValue(array, this.__actions__);
       }
       var result = [];
 
@@ -2082,7 +1791,7 @@ if (typeof Object.create === 'function') {
       }
       var index = -1,
           indexOf = getIndexOf(),
-          isCommon = indexOf == baseIndexOf,
+          isCommon = indexOf === baseIndexOf,
           cache = (isCommon && values.length >= LARGE_ARRAY_SIZE) ? createCache(values) : null,
           valuesLength = values.length;
 
@@ -2949,13 +2658,13 @@ if (typeof Object.create === 'function') {
      * @private
      * @param {Array} array The array to inspect.
      * @param {Function} [iteratee] The function invoked per iteration.
-     * @returns {Array} Returns the new duplicate-value-free array.
+     * @returns {Array} Returns the new duplicate free array.
      */
     function baseUniq(array, iteratee) {
       var index = -1,
           indexOf = getIndexOf(),
           length = array.length,
-          isCommon = indexOf == baseIndexOf,
+          isCommon = indexOf === baseIndexOf,
           isLarge = isCommon && length >= LARGE_ARRAY_SIZE,
           seen = isLarge ? createCache() : null,
           result = [];
@@ -4164,7 +3873,7 @@ if (typeof Object.create === 'function') {
      * @returns {string} Returns the function name.
      */
     function getFuncName(func) {
-      var result = func.name,
+      var result = (func.name + ''),
           array = realNames[result],
           length = array ? array.length : 0;
 
@@ -4431,11 +4140,12 @@ if (typeof Object.create === 'function') {
      * @returns {boolean} Returns `true` if `func` has a lazy counterpart, else `false`.
      */
     function isLaziable(func) {
-      var funcName = getFuncName(func);
-      if (!(funcName in LazyWrapper.prototype)) {
+      var funcName = getFuncName(func),
+          other = lodash[funcName];
+
+      if (typeof other != 'function' || !(funcName in LazyWrapper.prototype)) {
         return false;
       }
-      var other = lodash[funcName];
       if (func === other) {
         return true;
       }
@@ -5170,7 +4880,7 @@ if (typeof Object.create === 'function') {
 
     /**
      * Flattens a nested array. If `isDeep` is `true` the array is recursively
-     * flattened, otherwise it is only flattened a single level.
+     * flattened, otherwise it's only flattened a single level.
      *
      * @static
      * @memberOf _
@@ -5217,7 +4927,7 @@ if (typeof Object.create === 'function') {
     /**
      * Gets the index at which the first occurrence of `value` is found in `array`
      * using [`SameValueZero`](http://ecma-international.org/ecma-262/6.0/#sec-samevaluezero)
-     * for equality comparisons. If `fromIndex` is negative, it is used as the offset
+     * for equality comparisons. If `fromIndex` is negative, it's used as the offset
      * from the end of `array`. If `array` is sorted providing `true` for `fromIndex`
      * performs a faster binary search.
      *
@@ -5296,7 +5006,7 @@ if (typeof Object.create === 'function') {
           othIndex = othLength,
           caches = Array(length),
           indexOf = getIndexOf(),
-          isCommon = indexOf == baseIndexOf,
+          isCommon = indexOf === baseIndexOf,
           result = [];
 
       while (othIndex--) {
@@ -5581,7 +5291,7 @@ if (typeof Object.create === 'function') {
     /**
      * Uses a binary search to determine the lowest index at which `value` should
      * be inserted into `array` in order to maintain its sort order. If an iteratee
-     * function is provided it is invoked for `value` and each element of `array`
+     * function is provided it's invoked for `value` and each element of `array`
      * to compute their sort ranking. The iteratee is bound to `thisArg` and
      * invoked with one argument; (value).
      *
@@ -5855,7 +5565,7 @@ if (typeof Object.create === 'function') {
      * [`SameValueZero`](http://ecma-international.org/ecma-262/6.0/#sec-samevaluezero)
      * for equality comparisons, in which only the first occurence of each element
      * is kept. Providing `true` for `isSorted` performs a faster search algorithm
-     * for sorted arrays. If an iteratee function is provided it is invoked for
+     * for sorted arrays. If an iteratee function is provided it's invoked for
      * each element in the array to generate the criterion by which uniqueness
      * is computed. The `iteratee` is bound to `thisArg` and invoked with three
      * arguments: (value, index, array).
@@ -5913,7 +5623,7 @@ if (typeof Object.create === 'function') {
       if (!(iteratee == null && callback === baseCallback)) {
         iteratee = callback(iteratee, thisArg, 3);
       }
-      return (isSorted && getIndexOf() == baseIndexOf)
+      return (isSorted && getIndexOf() === baseIndexOf)
         ? sortedUniq(array, iteratee)
         : baseUniq(array, iteratee);
     }
@@ -6368,7 +6078,7 @@ if (typeof Object.create === 'function') {
       var value = this.__wrapped__;
 
       var interceptor = function(value) {
-        return (wrapped && wrapped.__dir__ < 0) ? value : value.reverse();
+        return value.reverse();
       };
       if (value instanceof LazyWrapper) {
         var wrapped = value;
@@ -6810,9 +6520,9 @@ if (typeof Object.create === 'function') {
     });
 
     /**
-     * Checks if `value` is in `collection` using
+     * Checks if `target` is in `collection` using
      * [`SameValueZero`](http://ecma-international.org/ecma-262/6.0/#sec-samevaluezero)
-     * for equality comparisons. If `fromIndex` is negative, it is used as the offset
+     * for equality comparisons. If `fromIndex` is negative, it's used as the offset
      * from the end of `collection`.
      *
      * @static
@@ -6907,7 +6617,7 @@ if (typeof Object.create === 'function') {
     /**
      * Invokes the method at `path` of each element in `collection`, returning
      * an array of the results of each invoked method. Any additional arguments
-     * are provided to each invoked method. If `methodName` is a function it is
+     * are provided to each invoked method. If `methodName` is a function it's
      * invoked for, and `this` bound to, each element in `collection`.
      *
      * @static
@@ -7559,7 +7269,7 @@ if (typeof Object.create === 'function') {
 
     /**
      * The opposite of `_.before`; this method creates a function that invokes
-     * `func` once it is called `n` or more times.
+     * `func` once it's called `n` or more times.
      *
      * @static
      * @memberOf _
@@ -7624,7 +7334,7 @@ if (typeof Object.create === 'function') {
 
     /**
      * Creates a function that invokes `func`, with the `this` binding and arguments
-     * of the created function, while it is called less than `n` times. Subsequent
+     * of the created function, while it's called less than `n` times. Subsequent
      * calls to the created function return the result of the last `func` invocation.
      *
      * @static
@@ -7904,7 +7614,7 @@ if (typeof Object.create === 'function') {
      * @param {boolean} [options.leading=false] Specify invoking on the leading
      *  edge of the timeout.
      * @param {number} [options.maxWait] The maximum time `func` is allowed to be
-     *  delayed before it is invoked.
+     *  delayed before it's invoked.
      * @param {boolean} [options.trailing=true] Specify invoking on the trailing
      *  edge of the timeout.
      * @returns {Function} Returns the new debounced function.
@@ -8052,7 +7762,7 @@ if (typeof Object.create === 'function') {
 
     /**
      * Defers invoking the `func` until the current call stack has cleared. Any
-     * additional arguments are provided to `func` when it is invoked.
+     * additional arguments are provided to `func` when it's invoked.
      *
      * @static
      * @memberOf _
@@ -8073,7 +7783,7 @@ if (typeof Object.create === 'function') {
 
     /**
      * Invokes `func` after `wait` milliseconds. Any additional arguments are
-     * provided to `func` when it is invoked.
+     * provided to `func` when it's invoked.
      *
      * @static
      * @memberOf _
@@ -8406,7 +8116,7 @@ if (typeof Object.create === 'function') {
      * Creates a function that invokes `func` with the `this` binding of the
      * created function and arguments from `start` and beyond provided as an array.
      *
-     * **Note:** This method is based on the [rest parameter](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/rest_parameters).
+     * **Note:** This method is based on the [rest parameter](https://developer.mozilla.org/Web/JavaScript/Reference/Functions/rest_parameters).
      *
      * @static
      * @memberOf _
@@ -8457,7 +8167,7 @@ if (typeof Object.create === 'function') {
      * Creates a function that invokes `func` with the `this` binding of the created
      * function and an array of arguments much like [`Function#apply`](https://es5.github.io/#x15.3.4.3).
      *
-     * **Note:** This method is based on the [spread operator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Spread_operator).
+     * **Note:** This method is based on the [spread operator](https://developer.mozilla.org/Web/JavaScript/Reference/Operators/Spread_operator).
      *
      * @static
      * @memberOf _
@@ -8578,10 +8288,10 @@ if (typeof Object.create === 'function') {
 
     /**
      * Creates a clone of `value`. If `isDeep` is `true` nested objects are cloned,
-     * otherwise they are assigned by reference. If `customizer` is provided it is
+     * otherwise they are assigned by reference. If `customizer` is provided it's
      * invoked to produce the cloned values. If `customizer` returns `undefined`
      * cloning is handled by the method instead. The `customizer` is bound to
-     * `thisArg` and invoked with two argument; (value [, index|key, object]).
+     * `thisArg` and invoked with up to three argument; (value [, index|key, object]).
      *
      * **Note:** This method is loosely based on the
      * [structured clone algorithm](http://www.w3.org/TR/html5/infrastructure.html#internal-structured-cloning-algorithm).
@@ -8637,15 +8347,15 @@ if (typeof Object.create === 'function') {
         isDeep = false;
       }
       return typeof customizer == 'function'
-        ? baseClone(value, isDeep, bindCallback(customizer, thisArg, 1))
+        ? baseClone(value, isDeep, bindCallback(customizer, thisArg, 3))
         : baseClone(value, isDeep);
     }
 
     /**
-     * Creates a deep clone of `value`. If `customizer` is provided it is invoked
+     * Creates a deep clone of `value`. If `customizer` is provided it's invoked
      * to produce the cloned values. If `customizer` returns `undefined` cloning
      * is handled by the method instead. The `customizer` is bound to `thisArg`
-     * and invoked with two argument; (value [, index|key, object]).
+     * and invoked with up to three argument; (value [, index|key, object]).
      *
      * **Note:** This method is loosely based on the
      * [structured clone algorithm](http://www.w3.org/TR/html5/infrastructure.html#internal-structured-cloning-algorithm).
@@ -8688,7 +8398,7 @@ if (typeof Object.create === 'function') {
      */
     function cloneDeep(value, customizer, thisArg) {
       return typeof customizer == 'function'
-        ? baseClone(value, true, bindCallback(customizer, thisArg, 1))
+        ? baseClone(value, true, bindCallback(customizer, thisArg, 3))
         : baseClone(value, true);
     }
 
@@ -8842,7 +8552,7 @@ if (typeof Object.create === 'function') {
     }
 
     /**
-     * Checks if `value` is empty. A value is considered empty unless it is an
+     * Checks if `value` is empty. A value is considered empty unless it's an
      * `arguments` object, array, string, or jQuery-like collection with a length
      * greater than `0` or an object with own enumerable properties.
      *
@@ -8881,10 +8591,10 @@ if (typeof Object.create === 'function') {
 
     /**
      * Performs a deep comparison between two values to determine if they are
-     * equivalent. If `customizer` is provided it is invoked to compare values.
+     * equivalent. If `customizer` is provided it's invoked to compare values.
      * If `customizer` returns `undefined` comparisons are handled by the method
-     * instead. The `customizer` is bound to `thisArg` and invoked with three
-     * arguments: (value, other [, index|key]).
+     * instead. The `customizer` is bound to `thisArg` and invoked with up to
+     * three arguments: (value, other [, index|key]).
      *
      * **Note:** This method supports comparing arrays, booleans, `Date` objects,
      * numbers, `Object` objects, regexes, and strings. Objects are compared by
@@ -9000,7 +8710,7 @@ if (typeof Object.create === 'function') {
     function isFunction(value) {
       // The use of `Object#toString` avoids issues with the `typeof` operator
       // in older versions of Chrome and Safari which return 'function' for regexes
-      // and Safari 8 equivalents which return 'object' for typed array constructors.
+      // and Safari 8 which returns 'object' for typed array constructors.
       return isObject(value) && objToString.call(value) == funcTag;
     }
 
@@ -9034,7 +8744,7 @@ if (typeof Object.create === 'function') {
     /**
      * Performs a deep comparison between `object` and `source` to determine if
      * `object` contains equivalent property values. If `customizer` is provided
-     * it is invoked to compare values. If `customizer` returns `undefined`
+     * it's invoked to compare values. If `customizer` returns `undefined`
      * comparisons are handled by the method instead. The `customizer` is bound
      * to `thisArg` and invoked with three arguments: (value, other, index|key).
      *
@@ -9416,7 +9126,7 @@ if (typeof Object.create === 'function') {
      * Recursively merges own enumerable properties of the source object(s), that
      * don't resolve to `undefined` into the destination object. Subsequent sources
      * overwrite property assignments of previous sources. If `customizer` is
-     * provided it is invoked to produce the merged values of the destination and
+     * provided it's invoked to produce the merged values of the destination and
      * source properties. If `customizer` returns `undefined` merging is handled
      * by the method instead. The `customizer` is bound to `thisArg` and invoked
      * with five arguments: (objectValue, sourceValue, key, object, source).
@@ -9465,7 +9175,7 @@ if (typeof Object.create === 'function') {
     /**
      * Assigns own enumerable properties of source object(s) to the destination
      * object. Subsequent sources overwrite property assignments of previous sources.
-     * If `customizer` is provided it is invoked to produce the assigned values.
+     * If `customizer` is provided it's invoked to produce the assigned values.
      * The `customizer` is bound to `thisArg` and invoked with five arguments:
      * (objectValue, sourceValue, key, object, source).
      *
@@ -9838,7 +9548,7 @@ if (typeof Object.create === 'function') {
      * // => 'default'
      */
     function get(object, path, defaultValue) {
-      var result = object == null ? undefined : baseGet(object, toPath(path), path + '');
+      var result = object == null ? undefined : baseGet(object, toPath(path), (path + ''));
       return result === undefined ? defaultValue : result;
     }
 
@@ -10153,7 +9863,7 @@ if (typeof Object.create === 'function') {
     /**
      * Creates an object composed of the picked `object` properties. Property
      * names may be specified as individual arguments or as arrays of property
-     * names. If `predicate` is provided it is invoked for each property of `object`
+     * names. If `predicate` is provided it's invoked for each property of `object`
      * picking the properties `predicate` returns truthy for. The predicate is
      * bound to `thisArg` and invoked with three arguments: (value, key, object).
      *
@@ -10187,7 +9897,7 @@ if (typeof Object.create === 'function') {
 
     /**
      * This method is like `_.get` except that if the resolved value is a function
-     * it is invoked with the `this` binding of its parent object and its result
+     * it's invoked with the `this` binding of its parent object and its result
      * is returned.
      *
      * @static
@@ -10228,7 +9938,7 @@ if (typeof Object.create === 'function') {
 
     /**
      * Sets the property value of `path` on `object`. If a portion of `path`
-     * does not exist it is created.
+     * does not exist it's created.
      *
      * @static
      * @memberOf _
@@ -10386,7 +10096,7 @@ if (typeof Object.create === 'function') {
 
     /**
      * Checks if `n` is between `start` and up to but not including, `end`. If
-     * `end` is not specified it is set to `start` with `start` then set to `0`.
+     * `end` is not specified it's set to `start` with `start` then set to `0`.
      *
      * @static
      * @memberOf _
@@ -11350,7 +11060,7 @@ if (typeof Object.create === 'function') {
 
     /**
      * Attempts to invoke `func`, returning either the result or the caught error
-     * object. Any additional arguments are provided to `func` when it is invoked.
+     * object. Any additional arguments are provided to `func` when it's invoked.
      *
      * @static
      * @memberOf _
@@ -11748,13 +11458,13 @@ if (typeof Object.create === 'function') {
      */
     function propertyOf(object) {
       return function(path) {
-        return baseGet(object, toPath(path), path + '');
+        return baseGet(object, toPath(path), (path + ''));
       };
     }
 
     /**
      * Creates an array of numbers (positive and/or negative) progressing from
-     * `start` up to, but not including, `end`. If `end` is not specified it is
+     * `start` up to, but not including, `end`. If `end` is not specified it's
      * set to `start` with `start` then set to `0`. If `end` is less than `start`
      * a zero-length range is created unless a negative `step` is specified.
      *
@@ -11947,7 +11657,7 @@ if (typeof Object.create === 'function') {
 
     /**
      * Gets the maximum value of `collection`. If `collection` is empty or falsey
-     * `-Infinity` is returned. If an iteratee function is provided it is invoked
+     * `-Infinity` is returned. If an iteratee function is provided it's invoked
      * for each value in `collection` to generate the criterion by which the value
      * is ranked. The `iteratee` is bound to `thisArg` and invoked with three
      * arguments: (value, index, collection).
@@ -11996,7 +11706,7 @@ if (typeof Object.create === 'function') {
 
     /**
      * Gets the minimum value of `collection`. If `collection` is empty or falsey
-     * `Infinity` is returned. If an iteratee function is provided it is invoked
+     * `Infinity` is returned. If an iteratee function is provided it's invoked
      * for each value in `collection` to generate the criterion by which the value
      * is ranked. The `iteratee` is bound to `thisArg` and invoked with three
      * arguments: (value, index, collection).
@@ -12573,7 +12283,7 @@ if (typeof Object.create === 'function') {
     baseForOwn(LazyWrapper.prototype, function(func, methodName) {
       var lodashFunc = lodash[methodName];
       if (lodashFunc) {
-        var key = lodashFunc.name,
+        var key = (lodashFunc.name + ''),
             names = realNames[key] || (realNames[key] = []);
 
         names.push({ 'name': methodName, 'func': lodashFunc });
@@ -12640,661 +12350,3 @@ if (typeof Object.create === 'function') {
     root._ = _;
   }
 }.call(this));
-
-}).call(this,typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],4:[function(require,module,exports){
-"use strict";
-
-var has_require = typeof require !== 'undefined';
-
-// Check for global lodash, otherwise require it
-if (typeof _ === "undefined") {
-  if (has_require) {
-    var _ = require('lodash');
-  } else {
-    throw new Error('nio.js requires lodash');
-  }
-}
-
-module.exports = {
-  _: _,
-  eventemitter3: require('eventemitter3'),
-  inherits: require('inherits')
-};
-
-},{"eventemitter3":1,"inherits":2,"lodash":3}],5:[function(require,module,exports){
-"use strict";
-(function () {
-
-  var deps = require('./deps');
-
-  var nio = deps._.assign(
-    {
-      _: deps._,
-
-      _version: '1.1.3',
-
-      // our modules
-      Stream: require('./stream'),
-      utils: require('./utils'),
-      source: require('./sources')
-    },
-    require('./streams')
-  );
-
-
-    if (typeof module !== 'undefined' && module.exports) {
-    module.exports = nio;
-    }
-
-  // TODO: Is there a better way to check this?
-  if (typeof window !== 'undefined') {
-    window.nio = nio;
-    }
-})();
-
-
-},{"./deps":4,"./sources":7,"./stream":9,"./streams":10,"./utils":11}],6:[function(require,module,exports){
-var deps = require('../deps');
-var _ = deps._;
-var inherits = deps.inherits;
-var Stream = require('../stream');
-
-function GenerateStream(dataTemplate, maxTimes, rate) {
-  if (!(this instanceof GenerateStream)) {
-    return new GenerateStream(dataTemplate, maxTimes, rate)
-  }
-
-  this.dataTemplate = dataTemplate;
-  this.maxTimes = maxTimes;
-  this.rate = rate;
-
-  this.numIterations = 0;
-  this.interval = false;
-
-  _.defaults(this, {
-    dataTemplate: {},
-    rate: 100,
-    maxTimes: 1
-  });
-
-  Stream.call(this);
-}
-
-inherits(GenerateStream, Stream);
-
-GenerateStream.prototype.oninit = function() {
-  this.interval = setInterval(this.generate.bind(this), this.rate);
-  return this;
-};
-
-GenerateStream.prototype.generate = function() {
-  if (this.maxTimes >= 0 && this.numIterations >= this.maxTimes) {
-    if (this.interval) {
-      clearInterval(this.interval);
-    }
-  } else {
-    this.push(this.getSignal(this.numIterations++));
-  }
-}
-
-GenerateStream.prototype.getSignal = function(iteration) {
-  if (_.isFunction(this.dataTemplate)) {
-    return this.dataTemplate(iteration);
-  } else {
-    return this.dataTemplate;
-  }
-}
-
-module.exports = GenerateStream;
-
-},{"../deps":4,"../stream":9}],7:[function(require,module,exports){
-module.exports = {
-  socketio: require('./socketio'),
-  generate: require('./generate')
-};
-
-},{"./generate":6,"./socketio":8}],8:[function(require,module,exports){
-var deps = require('../deps');
-var _ = deps._;
-var inherits = deps.inherits;
-var Stream = require('../stream');
-var utils = require('../utils');
-
-function SocketIOStream(host, rooms, maxLookback) {
-  if (!(this instanceof SocketIOStream)) {
-    return new SocketIOStream(host, rooms, maxLookback);
-  }
-  this.host = host;
-  this.rooms = rooms;
-  this.maxLookback = maxLookback;
-  this.sock = null;
-  Stream.call(this);
-}
-
-inherits(SocketIOStream, Stream);
-
-SocketIOStream.prototype.oninit = function () {
-  /* global io */
-  if (!window.io) {
-    var s = utils.script(this.host + '/socket.io/socket.io.js');
-    s.onload = function () { this.oninit() }.bind(this);
-    return this;
-  }
-
-  return this.connectToSocket();
-};
-
-SocketIOStream.prototype.connectToSocket = function () {
-
-  var sock = this.sock = io.connect(this.host, {'force new connection': true});
-
-  sock.on('connect', function () {
-    _.each(this.rooms, function (room) {
-      if (typeof this.maxLookback == 'undefined') {
-        // use the legacy room joining method
-        sock.emit('ready', room);
-      } else {
-        sock.emit('ready', {
-          room: room,
-          fromTime: this.maxLookback
-        });
-      }
-    }, this);
-  }.bind(this));
-
-  sock.on('connect_failed', function (e) {
-    console.error('connection failed');
-    console.error(e);
-  });
-
-  sock.on('error', function (e) {
-    console.error('connection error');
-    console.error(e);
-  });
-
-  sock.on('recvData', function (data) {
-    //if (this.state === Stream.STATES.PAUSE) return
-    this.push(JSON.parse(data));
-  }.bind(this));
-
-  return this;
-};
-
-SocketIOStream.prototype.onpause = function () {
-  if (this.sock) {
-    this.sock.disconnect();
-  }
-  this.sock = null;
-};
-
-SocketIOStream.prototype.onresume = function () {
-  if (this.sock && this.sock.connected) {
-    console.error("Resumed a connected socket...call pause first");
-    return;
-  }
-  this.connectToSocket();
-};
-
-
-// Write data back to our socket server when it's piped in
-SocketIOStream.prototype.onwrite = function (chunk) {
-  if (this.sock && this.sock.connected) {
-    this.sock.emit('pub', JSON.stringify(chunk));
-  } else {
-    console.error("Socket not connected or is paused");
-  }
-};
-
-module.exports = SocketIOStream;
-
-},{"../deps":4,"../stream":9,"../utils":11}],9:[function(require,module,exports){
-/**
- * @name Stream
- * @author Matt Dodge <matt@n.io>
- * @license MIT
- */
-
-var deps = require('./deps');
-var _ = deps._;
-var inherits = deps.inherits;
-var EventEmitter = deps.eventemitter3;
-
-/**
- * Stream is an event emitter for creating pipeline-based asynchronus workflows.
- *
- * @constructor
- * @extends {EventEmitter}
- * @param {function} onwrite
- */
-function Stream(opts) {
-  if (!(this instanceof Stream)) {
-    return new Stream(opts);
-  }
-  EventEmitter.call(this);
-
-  // listen for events and call onevent functions
-  this.on('*', function () {
-    var args = [].slice.call(arguments);
-    var event = args[0];
-    var func = this['on' + event];
-    if (func) {
-      func.apply(this, args.slice(1));
-    }
-  })
-
-  if (_.isFunction(opts)) {
-    this.onwrite = opts;
-  }
-  else if (_.isPlainObject(opts)) {
-    _.assign(this, opts);
-  }
-  this.emit('init');
-}
-
-inherits(Stream, EventEmitter);
-
-/**
- * emit is overwritten to support the '*' event, which is fired on every event.
- * This lets us listen to all events at once.
- *
- * @return {Stream}
- */
-Stream.prototype.emit = function () {
-  var args = [].slice.call(arguments);
-  EventEmitter.prototype.emit.apply(this, args);
-
-  // emit the '*' event
-  args.unshift('*');
-  EventEmitter.prototype.emit.apply(this, args);
-}
-
-/**
- * push sends chunks down the pipeline.
- *
- * @param {*} chunk Arbitrary write sent down the pipeline.
- */
-Stream.prototype.push = function (chunk) {
-  if (this.state === Stream.STATES.PAUSE) {
-    this.broadcast('pauseddata', chunk);
-    return;
-  }
-  if (_.isUndefined(chunk) || _.isNull(chunk)) {
-    return;
-  }
-  if (_.isEmpty(chunk) && (_.isArray(chunk) || _.isPlainObject(chunk))) {
-    return;
-  }
-  this.emit('data', chunk);
-}
-
-/**
- * write handles data that is piped to the stream.
- *
- * For now it just calls the _write function if it exists, but in the future it
- * may emit events or handle special cases.
- *
- * @param {*} chunk Arbitrary data sent down the pipeline.
- */
-Stream.prototype.write = function (chunk) {
-  if (this.onwrite) {
-    this.onwrite(chunk);
-  }
-}
-
-/**
- * onwrite allows users to read/modify data sent down the pipeline.
- *
- * This function should be overwritten. It passes data along by default.
- *
- * @param {*} chunk Arbitrary data sent down the pipeline.
- * @override
- */
-Stream.prototype.onwrite = function (chunk) {
-  this.push(chunk);
-}
-
-/**
- * pipe connects streams, allowing the parent stream to push data and events to
- * child streams.
- *
- * @param {...Stream|Stream[]} streams Streams to pipe together.
- * @return {Stream} The last stream in the pipeline. {@link Stream}
- */
-Stream.prototype.pipe = function () {
-  if (_.isArray(arguments[0])) {
-    return this.pipe.apply(this, arguments[0]);
-  }
-  var dest = arguments[0];
-
-  this.on('data', dest.write.bind(dest));
-  this.on('broadcast', dest.broadcast.bind(dest));
-
-  // use recursion to pipe the streams together
-  if (arguments.length > 1) {
-    var args = [].slice.call(arguments, 1);
-    dest.pipe.apply(dest, args);
-  }
-  return dest;
-}
-
-/**
- * broadcast sends an event down the pipeline and calls the associated
- * functions on each.
- *
- * @param {string} event The name of the event to broadcast.
- * @param {...*} arguments Any data to send along with the event.
- * @return {Stream} This stream.
- */
-Stream.prototype.broadcast = function () {
-  var args = [].slice.call(arguments);
-  args.unshift('broadcast');
-  this.emit.apply(this, args);
-  return this;
-}
-
-/**
- * onbroadcast emits the arguments to the broadcasted event.
- */
-Stream.prototype.onbroadcast = function () {
-  if (arguments.length === 0) {
-    console.warn('broadcast() called without any arguments');
-    return this;
-  }
-
-  // handle special case for states
-  var event = arguments[0].toUpperCase();
-  if (event in Stream.STATES) {
-    this.state = Stream.STATES[event];
-  }
-  this.emit.apply(this, arguments);
-}
-
-/**
- * _broadcastOrEmit
- *
- * @param {Boolean} broadcast wether or not to broadcast
- * @return {Function}
- */
-Stream.prototype._broadcastOrEmit = function (broadcast) {
-  if (broadcast === false) {
-    return this.emit.bind(this);
-  }
-  return this.broadcast.bind(this);
-}
-
-/**
- * reset tells a stream to flush their stored values, if any.
- *
- * @return {Stream} this
- */
-Stream.prototype.reset = function (broadcast) {
-  this._broadcastOrEmit(broadcast)('reset');
-  return this;
-}
-
-/**
- * States that the stream can be in.
- */
-Stream.STATES = {
-  DEFAULT: 0,
-  PAUSE: 1,
-  RESUME: 2
-};
-
-/**
- * Set the default state.
- */
-Stream.prototype.state = Stream.STATES.DEFAULT;
-
-/**
- * Create a propogating function for each state.
- */
-_.each(Stream.STATES, function (value, name) {
-  name = name.toLowerCase();
-  Stream.prototype[name] = function (broadcast) {
-    this.state = value;
-    this._broadcastOrEmit(broadcast)(name);
-    return this;
-  };
-});
-
-module.exports = Stream;
-
-},{"./deps":4}],10:[function(require,module,exports){
-'use strict';
-
-var _ = require('./deps')._;
-var stream = require('./stream');
-
-/**
- * getPropertyFunc creates a function that gets a property on an object.
- *
- * @param {(string|function)=} value
- * @return {function}
- */
-function getPropertyFunc(value) {
-  if (_.isUndefined(value)) {
-    return function (chunk) { return chunk; }
-  } else if (_.isString(value)) {
-    return function (chunk) { return chunk[value]; }
-  } else if (_.isFunction(value)) {
-    return value;
-  } else {
-    throw new Error('value must be a string or function');
-  }
-}
-
-/**
- * func pushes the returned chunk down the pipeline.
- *
- * @param {function} fn
- * @return {stream}
- */
-exports.func = function (fn) {
-  return stream(function (chunk) {
-    var results = fn.call(this, chunk);
-    this.push(results);
-  })
-}
-
-/**
- * pass creates a stream observes chunks passed through it.
- *
- * @param {function} fn
- * @return {stream}
- */
-exports.pass = function (fn) {
-  return stream(function (chunk) {
-    if (fn) fn.call(this, _.clone(chunk));
-    this.push(chunk);
-  })
-};
-
-// will only push a chunk if the function it's passed to returns true
-exports.filter = function (fn) {
-  return stream(function (chunk) {
-    if (fn.call(this, chunk)) {
-      this.push(chunk);
-    }
-  })
-};
-
-/**
- * filter to push chunk if property's value is value.
- *
- * @param property
- * @param value
- * @return {stream}
- */
-exports.is = function (property, value) {
-    return exports.filter(function(d) {
-        var fn = getPropertyFunc(property);
-        return fn(d) == value;
-    })
-};
-
-/**
- * filter to push chunk if it has a property.
- *
- * @param property
- * @return {stream}
- */
-exports.has = function (property) {
-    return exports.filter(function(d) {
-        return property in d ;
-    });
-};
-
-/**
- * get pushes a property on the chunks passed to it.
- *
- * @param {(string|function)=} value The property getter for the chunk ID.
- * @return {stream}
- */
-exports.get = function (value) {
-  var fn = getPropertyFunc(value);
-  return exports.func(fn);
-};
-
-/**
- * single pushes each item in an array.
- *
- * @return {stream}
- */
-exports.single = function () {
-  return stream(function (chunk) {
-    if (_.isArray(chunk)) {
-      _.each(chunk, this.push, this);
-    } else {
-      this.push(chunk);
-    }
-  });
-};
-
-/**
- * defaults assigns defaults to chunks.
- *
- * @param {object} opts Default property values.
- * @return {stream}
- */
-exports.defaults = function (opts) {
-  return exports.func(_.partialRight(_.defaults, opts))
-}
-
-/**
- * log logs chunks passed through it.
- *
- * @param {string=} prefix Prefix log output.
- * @return stream
- */
-exports.log = function (prefix) {
-  return exports.pass(function (chunk) {
-    if (prefix) {
-      console.log(prefix, chunk);
-    } else {
-      console.log(chunk);
-    }
-  });
-};
-
-},{"./deps":4,"./stream":9}],11:[function(require,module,exports){
-var deps = require('./deps');
-var _ = deps._;
-
-// turns urls and twitter handles/hashtags into links
-exports.linkify = function (text) {
-  // urls
-  text = text.replace(
-    /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig,
-    '<a class="linkify-link" target=_blank href="$1">$1</a>'
-  );
-  // usernames
-  text = text.replace(
-    /(^|\s)@(\w+)/g,
-    '$1<a class="linkify-username" data-username="$2" target=_blank href="http://twitter.com/$2">'
-    + '@$2' +
-    '</a>'
-  );
-  // hashtags
-  text = text.replace(
-    /(^|\s)#(\w+)/g,
-    '$1<a class="linkify-hashtag" data-hashtag="$2" target=_blank href="http://twitter.com/search?q=%23$2">'
-      + '#$2' +
-    '</a>'
-  );
-  return text;
-};
-
-exports.truncate = function (text, len) {
-  if (text.length > len) {
-    return text.substring(0, len - 3) + '...';
-  }
-  return text;
-};
-
-exports.cycle = function (value) {
-  if (_.isNumber(value)) {
-    value = _.range(1, value + 1);
-  }
-  var current = -1; // so the first call will get the first value
-  return function () {
-    current = current === value.length - 1 ? 0 : current + 1;
-    var target = value[current];
-    return _.isFunction(target) ? target() : target;
-  }
-};
-
-exports.script = function (url) {
-  var script = document.createElement('script');
-  script.src = url;
-  document.body.appendChild(script);
-  return script;
-};
-
-exports.argsOrArray = function (fn) {
-  return function () {
-    if (_.isArray(arguments[0])) {
-      return fn.apply(fn, arguments[0]);
-    }
-    return fn.apply(fn, arguments);
-  };
-};
-
-/**
- * utc creates/converts a date to UTC
- *
- * @param date
- * @return {undefined}
- */
-exports.utc = function (date) {
-  if (!date) {
-    date = new Date();
-  } else if (_.isString(date)) {
-    date = new Date(date);
-  }
-    return new Date(Date.UTC(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-    date.getHours(),
-    date.getMinutes(),
-    date.getSeconds()
-  ));
-};
-
-exports.windowSize = function () {
-  var w = window;
-  var e = document.documentElement;
-  var g = document.getElementsByTagName('body')[0];
-  var width = w.innerWidth || e.clientWidth || g.clientWidth;
-  var height = w.innerHeight || e.clientHeight || g.clientHeight;
-  return {
-    width: width,
-    height: height
-  };
-};
-
-module.exports = exports;
-
-},{"./deps":4}]},{},[5])

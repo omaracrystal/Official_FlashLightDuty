@@ -1,4 +1,4 @@
-// var socket = io();
+var socket = io();
 
 function darkroom(){
     function flashlightOff() {
@@ -16,8 +16,6 @@ function darkroom(){
           'cursor': 'none'
         });
         socket.emit('mouse move', {x: mouseX, y: mouseY});
-
-
       }
 
       function flashlight2(x, y) {
@@ -31,19 +29,15 @@ function darkroom(){
 
       }
 
-      // function updateImg() {
-      //   $('.masked').attr('src', 'http://www.placekitten.com/' + $(window).width() + '/' + $(window).height());
-      // }
-
-      socket.on('mouse move', function(data) {
-        // console.log('poop');
-        flashlight2(data.x, data.y);
-      });
+      // socket.on('mouse move', function(data) {
+      //   // console.log('poop');
+      //   flashlight2(data.x, data.y);
+      // });
 
       $('.masked').on({
         'mousemove': flashlight,
         'mouseleave': flashlightOff
       });
-  };
+}
 
-  // darkroom();
+darkroom();

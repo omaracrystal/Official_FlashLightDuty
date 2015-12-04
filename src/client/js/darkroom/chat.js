@@ -267,13 +267,5 @@ $(function() {
     removeChatTyping(data);
   });
 
-  // Whenever the server emits login
-  // socket.on('play page loaded' function(data) {
-  //   connected = true;
-  //   $window.on('load', function () {
-
-  //   })
-  // })
-
 
 });
