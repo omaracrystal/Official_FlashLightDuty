@@ -3,6 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "main": "./lib/index",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/Automattic/socket.io"
+  },
   "scripts": {
     "start": "node ./src/server/bin/www"
   },
